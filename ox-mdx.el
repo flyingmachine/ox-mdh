@@ -47,91 +47,47 @@
 ;;; Define Back-End
 
 (org-export-define-derived-backend 'mdx 'md
-  :export-block '("MDX" "MARKDOWN")
-  :filters-alist '((:filter-parse-tree . org-md-separate-elements))
+  :export-block '("MDX" "EXTENDED MARKDOWN")
   :menu-entry
-  '(?m "Export to Markdown"
+  '(?d "Export to Extended Markdown"
        ((?M "To temporary buffer"
-	    (lambda (a s v b) (org-md-export-as-markdown a s v)))
-	(?m "To file" (lambda (a s v b) (org-md-export-to-markdown a s v)))
+	    (lambda (a s v b) (org-mdx-export-as-markdown a s v)))
+	(?m "To file" (lambda (a s v b) (org-mdx-export-to-markdown a s v)))
 	(?o "To file and open"
 	    (lambda (a s v b)
-	      (if a (org-md-export-to-markdown t s v)
-		(org-open-file (org-md-export-to-markdown nil s v)))))))
-  :translate-alist '((bold . org-md-bold)
-		     (code . org-md-verbatim)
-		     (underline . org-md-verbatim)
-		     (comment . (lambda (&rest args) ""))
-		     (comment-block . (lambda (&rest args) ""))
-		     (example-block . org-md-example-block)
-		     (fixed-width . org-md-example-block)
-		     (footnote-definition . ignore)
-		     (footnote-reference . ignore)
-		     (headline . org-md-headline)
-		     (horizontal-rule . org-md-horizontal-rule)
-		     (inline-src-block . org-md-verbatim)
-		     (italic . org-md-italic)
-		     (item . org-md-item)
-		     (line-break . org-md-line-break)
-		     (link . org-md-link)
-		     (paragraph . org-md-paragraph)
-		     (plain-list . org-md-plain-list)
-		     (plain-text . org-md-plain-text)
-		     (quote-block . org-md-quote-block)
-		     (quote-section . org-md-example-block)
-		     (section . org-md-section)
-		     (src-block . org-md-example-block)
-		     (template . org-md-template)
-		     (verbatim . org-md-verbatim)))
+	      (if a (org-mdx-export-to-markdown t s v)
+		(org-open-file (org-mdx-export-to-markdown nil s v)))))))
+  :translate-alist '((code . org-mdx-verbatim)
+                     (example-block . org-mdx-src-block)
+                     ;;(fixed-width . org-mdx-src-block)
+                     (inline-src-block . org-md-verbatim)
+                     (inline-src-block . org-mdx-inline-src-block)
+                     (link . org-md-link)
+                     (src-block . org-mdx-src-block)
+		     (underline . org-mdx-verbatim)
+		     (verbatim . org-mdx-verbatim)))
 
 
-
 ;;; Filters
 
-(defun org-md-separate-elements (tree backend info)
-  "Make sure elements are separated by at least one blank line.
-
-TREE is the parse tree being exported.  BACKEND is the export
-back-end used.  INFO is a plist used as a communication channel.
-
-Assume BACKEND is `md'."
-  (org-element-map tree org-element-all-elements
-    (lambda (elem)
-      (unless (eq (org-element-type elem) 'org-data)
-	(org-element-put-property
-	 elem :post-blank
-	 (let ((post-blank (org-element-property :post-blank elem)))
-	   (if (not post-blank) 1 (max 1 post-blank)))))))
-  ;; Return updated tree.
-  tree)
-
-
-
 ;;; Transcode Functions
 
 ;;;; Bold
 
-(defun org-md-bold (bold contents info)
-  "Transcode BOLD object into Markdown format.
-CONTENTS is the text within bold markup.  INFO is a plist used as
-a communication channel."
-  (format "**%s**" contents))
-
-
 ;;;; Code and Verbatim
 
-(defun org-md-verbatim (verbatim contents info)
-  "Transcode VERBATIM object into Markdown format.
-CONTENTS is nil.  INFO is a plist used as a communication
-channel."
-  (let ((value (org-element-property :value verbatim)))
-    (format (cond ((not (string-match "`" value)) "`%s`")
-		  ((or (string-match "\\``" value)
-		       (string-match "`\\'" value))
-		   "`` %s ``")
-		  (t "``%s``"))
-	    value)))
+(defun org-mdx-inline-src-block (src contents info)
+  (format "`%s`" (org-element-property :value code)))
 
+(defun org-mdx-verbatim (verbatim contents info)
+  "Do nothing to verbatim content."
+  (org-element-property :value verbatim))
+
+(defun org-mdx-src-block (src-block contents info)
+  (let ((lang (org-element-property :language src-block)))
+    (format "```%s\n%s```"
+            (or lang "")
+            (org-element-property :value src-block))))
 
 ;;;; Example Block and Src Block
 
@@ -143,110 +99,6 @@ channel."
    "^" "    "
    (org-remove-indentation
     (org-element-property :value example-block))))
-
-
-;;;; Headline
-
-(defun org-md-headline (headline contents info)
-  "Transcode HEADLINE element into Markdown format.
-CONTENTS is the headline contents.  INFO is a plist used as
-a communication channel."
-  (unless (org-element-property :footnote-section-p headline)
-    (let* ((level (org-export-get-relative-level headline info))
-	   (title (org-export-data (org-element-property :title headline) info))
-	   (todo (and (plist-get info :with-todo-keywords)
-		      (let ((todo (org-element-property :todo-keyword
-							headline)))
-			(and todo (concat (org-export-data todo info) " ")))))
-	   (tags (and (plist-get info :with-tags)
-		      (let ((tag-list (org-export-get-tags headline info)))
-			(and tag-list
-			     (format "     :%s:"
-				     (mapconcat 'identity tag-list ":"))))))
-	   (priority
-	    (and (plist-get info :with-priority)
-		 (let ((char (org-element-property :priority headline)))
-		   (and char (format "[#%c] " char)))))
-	   ;; Headline text without tags.
-	   (heading (concat todo priority title)))
-      (cond
-       ;; Cannot create a headline.  Fall-back to a list.
-       ((or (org-export-low-level-p headline info)
-	    (not (memq org-md-headline-style '(atx setext)))
-	    (and (eq org-md-headline-style 'atx) (> level 6))
-	    (and (eq org-md-headline-style 'setext) (> level 2)))
-	(let ((bullet
-	       (if (not (org-export-numbered-headline-p headline info)) "-"
-		 (concat (number-to-string
-			  (car (last (org-export-get-headline-number
-				      headline info))))
-			 "."))))
-	  (concat bullet (make-string (- 4 (length bullet)) ? ) heading tags
-		  "\n\n"
-		  (and contents
-		       (replace-regexp-in-string "^" "    " contents)))))
-       ;; Use "Setext" style.
-       ((eq org-md-headline-style 'setext)
-	(concat heading tags "\n"
-		(make-string (length heading) (if (= level 1) ?= ?-))
-		"\n\n"
-		contents))
-       ;; Use "atx" style.
-       (t (concat (make-string level ?#) " " heading tags "\n\n" contents))))))
-
-
-;;;; Horizontal Rule
-
-(defun org-md-horizontal-rule (horizontal-rule contents info)
-  "Transcode HORIZONTAL-RULE element into Markdown format.
-CONTENTS is the horizontal rule contents.  INFO is a plist used
-as a communication channel."
-  "---")
-
-
-;;;; Italic
-
-(defun org-md-italic (italic contents info)
-  "Transcode ITALIC object into Markdown format.
-CONTENTS is the text within italic markup.  INFO is a plist used
-as a communication channel."
-  (format "*%s*" contents))
-
-
-;;;; Item
-
-(defun org-md-item (item contents info)
-  "Transcode ITEM element into Markdown format.
-CONTENTS is the item contents.  INFO is a plist used as
-a communication channel."
-  (let* ((type (org-element-property :type (org-export-get-parent item)))
-	 (struct (org-element-property :structure item))
-	 (bullet (if (not (eq type 'ordered)) "-"
-		   (concat (number-to-string
-			    (car (last (org-list-get-item-number
-					(org-element-property :begin item)
-					struct
-					(org-list-prevs-alist struct)
-					(org-list-parents-alist struct)))))
-			   "."))))
-    (concat bullet
-	    (make-string (- 4 (length bullet)) ? )
-	    (case (org-element-property :checkbox item)
-	      (on "[X] ")
-	      (trans "[-] ")
-	      (off "[ ] "))
-	    (let ((tag (org-element-property :tag item)))
-	      (and tag (format "**%s:** "(org-export-data tag info))))
-	    (org-trim (replace-regexp-in-string "^" "    " contents)))))
-
-
-;;;; Line Break
-
-(defun org-md-line-break (line-break contents info)
-  "Transcode LINE-BREAK object into Markdown format.
-CONTENTS is nil.  INFO is a plist used as a communication
-channel."
-  "  \n")
 
 
 ;;;; Link
@@ -325,89 +177,10 @@ a communication channel."
 	       (if (not contents) (format "<%s>" path)
 		 (format "[%s](%s)" contents path)))))))
 
-
-;;;; Paragraph
-
-(defun org-md-paragraph (paragraph contents info)
-  "Transcode PARAGRAPH element into Markdown format.
-CONTENTS is the paragraph contents.  INFO is a plist used as
-a communication channel."
-  (let ((first-object (car (org-element-contents paragraph))))
-    ;; If paragraph starts with a #, protect it.
-    (if (and (stringp first-object) (string-match "\\`#" first-object))
-	(replace-regexp-in-string "\\`#" "\\#" contents nil t)
-      contents)))
-
-
-;;;; Plain List
-
-(defun org-md-plain-list (plain-list contents info)
-  "Transcode PLAIN-LIST element into Markdown format.
-CONTENTS is the plain-list contents.  INFO is a plist used as
-a communication channel."
-  contents)
-
-
-;;;; Plain Text
-
-(defun org-md-plain-text (text info)
-  "Transcode a TEXT string into Markdown format.
-TEXT is the string to transcode.  INFO is a plist holding
-contextual information."
-  (when (plist-get info :with-smart-quotes)
-    (setq text (org-export-activate-smart-quotes text :html info)))
-  ;; Protect ambiguous #.  This will protect # at the beginning of
-  ;; a line, but not at the beginning of a paragraph.  See
-  ;; `org-md-paragraph'.
-  (setq text (replace-regexp-in-string "\n#" "\n\\\\#" text))
-  ;; Protect ambiguous !
-  (setq text (replace-regexp-in-string "\\(!\\)\\[" "\\\\!" text nil nil 1))
-  ;; Protect `, *, _ and \
-  (setq text (replace-regexp-in-string "[`*_\\]" "\\\\\\&" text))
-  ;; Handle special strings, if required.
-  (when (plist-get info :with-special-strings)
-    (setq text (org-html-convert-special-strings text)))
-  ;; Handle break preservation, if required.
-  (when (plist-get info :preserve-breaks)
-    (setq text (replace-regexp-in-string "[ \t]*\n" "  \n" text)))
-  ;; Return value.
-  text)
-
-
-;;;; Quote Block
-
-(defun org-md-quote-block (quote-block contents info)
-  "Transcode QUOTE-BLOCK element into Markdown format.
-CONTENTS is the quote-block contents.  INFO is a plist used as
-a communication channel."
-  (replace-regexp-in-string
-   "^" "> "
-   (replace-regexp-in-string "\n\\'" "" contents)))
-
-
-;;;; Section
-
-(defun org-md-section (section contents info)
-  "Transcode SECTION element into Markdown format.
-CONTENTS is the section contents.  INFO is a plist used as
-a communication channel."
-  contents)
-
-
-;;;; Template
-
-(defun org-md-template (contents info)
-  "Return complete document string after Markdown conversion.
-CONTENTS is the transcoded contents string.  INFO is a plist used
-as a communication channel."
-  contents)
-
-
-
 ;;; Interactive function
 
 ;;;###autoload
-(defun org-md-export-as-markdown (&optional async subtreep visible-only)
+(defun org-mdx-export-as-markdown (&optional async subtreep visible-only)
   "Export current buffer to a Markdown buffer.
 
 If narrowing is active in the current buffer, only export its
@@ -438,26 +211,26 @@ non-nil."
 	      (insert output)
 	      (goto-char (point-min))
 	      (text-mode)
-	      (org-export-add-to-stack (current-buffer) 'md)))
-	`(org-export-as 'md ,subtreep ,visible-only))
+	      (org-export-add-to-stack (current-buffer) 'mdx)))
+	`(org-export-as 'mdx ,subtreep ,visible-only))
     (let ((outbuf (org-export-to-buffer
-		   'md "*Org MD Export*" subtreep visible-only)))
+		   'mdx "*Org MD Export*" subtreep visible-only)))
       (with-current-buffer outbuf (text-mode))
       (when org-export-show-temporary-export-buffer
 	(switch-to-buffer-other-window outbuf)))))
 
 ;;;###autoload
-(defun org-md-convert-region-to-md ()
+(defun org-mdx-convert-region-to-md ()
   "Assume the current region has org-mode syntax, and convert it to Markdown.
 This can be used in any buffer.  For example, you can write an
 itemized list in org-mode syntax in a Markdown buffer and use
 this command to convert it."
   (interactive)
-  (org-export-replace-region-by 'md))
+  (org-export-replace-region-by 'mdx))
 
 
 ;;;###autoload
-(defun org-md-export-to-markdown (&optional async subtreep visible-only)
+(defun org-mdx-export-to-markdown (&optional async subtreep visible-only)
   "Export current buffer to a Markdown file.
 
 If narrowing is active in the current buffer, only export its
@@ -481,10 +254,10 @@ Return output file's name."
   (let ((outfile (org-export-output-file-name ".md" subtreep)))
     (if async
 	(org-export-async-start
-	    (lambda (f) (org-export-add-to-stack f 'md))
+	    (lambda (f) (org-export-add-to-stack f 'mdx))
 	  `(expand-file-name
-	    (org-export-to-file 'md ,outfile ,subtreep ,visible-only)))
-      (org-export-to-file 'md outfile subtreep visible-only))))
+	    (org-export-to-file 'mdx ,outfile ,subtreep ,visible-only)))
+      (org-export-to-file 'mdx outfile subtreep visible-only))))
 
 
 (provide 'ox-mdx)
