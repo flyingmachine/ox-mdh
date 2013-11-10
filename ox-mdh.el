@@ -1,8 +1,8 @@
-;;; ox-md.el --- Markdown Back-End for Org Export Engine
+;;; ox-mdh.el: Extended Markdown Back-End for Org Export Engine
 
-;; Copyright (C) 2012, 2013  Free Software Foundation, Inc.
+;; Copyright (C) 2013  Daniel Higginbotham
 
-;; Author: Nicolas Goaziou <n.goaziou@gmail.com>
+;; Author: Daniel Higginbotham <daniel@flyingmachinestudios.com>
 ;; Keywords: org, wp, markdown
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
@@ -20,12 +20,7 @@
 
 ;;; Commentary:
 
-;; This library implements a Markdown back-end (vanilla flavour) for
-;; Org exporter, based on `html' back-end.
-;;
-;; It provides two commands for export, depending on the desired
-;; output: `org-md-export-as-markdown' (temporary buffer) and
-;; `org-md-export-to-markdown' ("md" file).
+;; This library extends the Markdown backend
 
 ;;; Code:
 
@@ -36,7 +31,7 @@
 
 ;;; User-Configurable Variables
 
-(defgroup org-export-mdx nil
+(defgroup org-export-mdh nil
   "Options specific to Markdown export back-end."
   :tag "Org Extended Markdown"
   :group 'org-export
@@ -46,26 +41,26 @@
 
 ;;; Define Back-End
 
-(org-export-define-derived-backend 'mdx 'md
-  :export-block '("MDX" "EXTENDED MARKDOWN")
+(org-export-define-derived-backend 'mdh 'md
+  :export-block '("MDH" "EXTENDED MARKDOWN")
   :menu-entry
-  '(?d "Export to Extended Markdown"
+  '(?m "Export to Extended Markdown"
        ((?M "To temporary buffer"
-	    (lambda (a s v b) (org-mdx-export-as-markdown a s v)))
-	(?m "To file" (lambda (a s v b) (org-mdx-export-to-markdown a s v)))
+	    (lambda (a s v b) (org-mdh-export-as-markdown a s v)))
+	(?m "To file" (lambda (a s v b) (org-mdh-export-to-markdown a s v)))
 	(?o "To file and open"
 	    (lambda (a s v b)
-	      (if a (org-mdx-export-to-markdown t s v)
-		(org-open-file (org-mdx-export-to-markdown nil s v)))))))
-  :translate-alist '((code . org-mdx-verbatim)
-                     (example-block . org-mdx-src-block)
-                     ;;(fixed-width . org-mdx-src-block)
+	      (if a (org-mdh-export-to-markdown t s v)
+		(org-open-file (org-mdh-export-to-markdown nil s v)))))))
+  :translate-alist '((code . org-mdh-verbatim)
+                     (example-block . org-mdh-src-block)
+                     ;;(fixed-width . org-mdh-src-block)
                      (inline-src-block . org-md-verbatim)
-                     (inline-src-block . org-mdx-inline-src-block)
+                     (inline-src-block . org-mdh-inline-src-block)
                      (link . org-md-link)
-                     (src-block . org-mdx-src-block)
-		     (underline . org-mdx-verbatim)
-		     (verbatim . org-mdx-verbatim)))
+                     (src-block . org-mdh-src-block)
+		     (underline . org-mdh-verbatim)
+		     (verbatim . org-mdh-verbatim)))
 
 
 ;;; Filters
@@ -76,14 +71,14 @@
 
 ;;;; Code and Verbatim
 
-(defun org-mdx-inline-src-block (src contents info)
+(defun org-mdh-inline-src-block (src contents info)
   (format "`%s`" (org-element-property :value code)))
 
-(defun org-mdx-verbatim (verbatim contents info)
+(defun org-mdh-verbatim (verbatim contents info)
   "Do nothing to verbatim content."
   (org-element-property :value verbatim))
 
-(defun org-mdx-src-block (src-block contents info)
+(defun org-mdh-src-block (src-block contents info)
   (let ((lang (org-element-property :language src-block)))
     (format "```%s\n%s```"
             (or lang "")
@@ -180,7 +175,7 @@ a communication channel."
 ;;; Interactive function
 
 ;;;###autoload
-(defun org-mdx-export-as-markdown (&optional async subtreep visible-only)
+(defun org-mdh-export-as-markdown (&optional async subtreep visible-only)
   "Export current buffer to a Markdown buffer.
 
 If narrowing is active in the current buffer, only export its
@@ -211,26 +206,26 @@ non-nil."
 	      (insert output)
 	      (goto-char (point-min))
 	      (text-mode)
-	      (org-export-add-to-stack (current-buffer) 'mdx)))
-	`(org-export-as 'mdx ,subtreep ,visible-only))
+	      (org-export-add-to-stack (current-buffer) 'mdh)))
+	`(org-export-as 'mdh ,subtreep ,visible-only))
     (let ((outbuf (org-export-to-buffer
-		   'mdx "*Org MD Export*" subtreep visible-only)))
+		   'mdh "*Org MD Export*" subtreep visible-only)))
       (with-current-buffer outbuf (text-mode))
       (when org-export-show-temporary-export-buffer
 	(switch-to-buffer-other-window outbuf)))))
 
 ;;;###autoload
-(defun org-mdx-convert-region-to-md ()
+(defun org-mdh-convert-region-to-md ()
   "Assume the current region has org-mode syntax, and convert it to Markdown.
 This can be used in any buffer.  For example, you can write an
 itemized list in org-mode syntax in a Markdown buffer and use
 this command to convert it."
   (interactive)
-  (org-export-replace-region-by 'mdx))
+  (org-export-replace-region-by 'mdh))
 
 
 ;;;###autoload
-(defun org-mdx-export-to-markdown (&optional async subtreep visible-only)
+(defun org-mdh-export-to-markdown (&optional async subtreep visible-only)
   "Export current buffer to a Markdown file.
 
 If narrowing is active in the current buffer, only export its
@@ -254,15 +249,10 @@ Return output file's name."
   (let ((outfile (org-export-output-file-name ".md" subtreep)))
     (if async
 	(org-export-async-start
-	    (lambda (f) (org-export-add-to-stack f 'mdx))
+	    (lambda (f) (org-export-add-to-stack f 'mdh))
 	  `(expand-file-name
-	    (org-export-to-file 'mdx ,outfile ,subtreep ,visible-only)))
-      (org-export-to-file 'mdx outfile subtreep visible-only))))
+	    (org-export-to-file 'mdh ,outfile ,subtreep ,visible-only)))
+      (org-export-to-file 'mdh outfile subtreep visible-only))))
 
 
-(provide 'ox-mdx)
-
-;; Local variables:
-;; generated-autoload-file: "org-loaddefs.el"
-;; End:
-
+(provide 'ox-mdh)
