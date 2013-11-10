@@ -46,8 +46,16 @@
 ;;; Define Back-End
 
 (org-export-define-derived-backend 'mdh 'md
-  :export-block '("MDH" "EXTENDED MARKDOWN")
-
+  :export-block '("MDH" "HIGGINBOTHAM EXTENDED MARKDOWN")
+  :menu-entry
+  '(?m "Export to Higginbotham Extended Markdown"
+       ((?M "To temporary buffer"
+	    (lambda (a s v b) (org-md-export-as-markdown a s v)))
+	(?m "To file" (lambda (a s v b) (org-md-export-to-markdown a s v)))
+	(?o "To file and open"
+	    (lambda (a s v b)
+	      (if a (org-md-export-to-markdown t s v)
+		(org-open-file (org-md-export-to-markdown nil s v)))))))
   :options-alist
   '((:mdh-include-preamble nil "mdh-include-preamble" org-mdh-include-preamble t)
     (:mdh-link-title nil "mdh-link-title" org-mdh-link-title t)
