@@ -203,12 +203,10 @@ Return output file's name."
   (org-element-map tree org-element-all-elements
     (lambda (elem)
       (unless (member (org-element-type elem) org-mdh-unseparate-element-types)
-        (progn
-          (message (symbol-name (org-element-type elem)))
-          (org-element-put-property
-           elem :post-blank
-           (let ((post-blank (org-element-property :post-blank elem)))
-             (if (not post-blank) 1 (max 1 post-blank))))))))
+        (org-element-put-property
+         elem :post-blank
+         (let ((post-blank (org-element-property :post-blank elem)))
+           (if (not post-blank) 1 (max 1 post-blank)))))))
   ;; Return updated tree.
   tree)
 
