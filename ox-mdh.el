@@ -1,16 +1,20 @@
-;;; ox-mdh.el: Extended Markdown Back-End for Org Export Engine
+;;; ox-mdh.el: Higginbotham Extended Markdown Back-End for Org Export Engine
 
 ;; Copyright (C) 2013  Daniel Higginbotham
 
 ;; Author: Daniel Higginbotham <daniel@flyingmachinestudios.com>
 ;; Keywords: org, wp, markdown
 
-;; GNU Emacs is free software: you can redistribute it and/or modify
+;; This file is not part of GNU Emacs.
+
+;;; Copyright Notice:
+
+;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
 ;; (at your option) any later version.
 
-;; GNU Emacs is distributed in the hope that it will be useful,
+;; This program is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
@@ -33,8 +37,8 @@
 
 (defgroup org-export-mdh nil
   "Options specific to Markdown export back-end."
-  :tag "Org Extended Markdown"
-  :group 'org-export
+  :tag "Org Higginbotham Extended Markdown"
+  :group 'org-export-mdh
   :version "24.4"
   :package-version '(Org . "8.0"))
 
@@ -43,15 +47,12 @@
 
 (org-export-define-derived-backend 'mdh 'md
   :export-block '("MDH" "EXTENDED MARKDOWN")
-  :menu-entry
-  '(?m "Export to Extended Markdown"
-       ((?M "To temporary buffer"
-	    (lambda (a s v b) (org-mdh-export-as-markdown a s v)))
-	(?m "To file" (lambda (a s v b) (org-mdh-export-to-markdown a s v)))
-	(?o "To file and open"
-	    (lambda (a s v b)
-	      (if a (org-mdh-export-to-markdown t s v)
-		(org-open-file (org-mdh-export-to-markdown nil s v)))))))
+
+  :options-alist
+  '((:mdh-include-preamble nil "mdh-include-preamble" org-mdh-include-preamble t)
+    (:mdh-link-title nil "mdh-link-title" org-mdh-link-title t)
+    (:mdh-preamble "MDH_PREAMBLE" nil org-mdh-preamble t))
+  
   :translate-alist '((code . org-mdh-verbatim)
                      (example-block . org-mdh-src-block)
                      ;;(fixed-width . org-mdh-src-block)
@@ -62,12 +63,22 @@
 		     (underline . org-mdh-verbatim)
 		     (verbatim . org-mdh-verbatim)))
 
+(defcustom org-mdh-include-preamble t
+  "Whether to actually include the preamble."
+  :group 'org-export-mdh
+  :type 'boolean)
+
+(defcustom org-mdh-preamble nil
+  "Preamble contents"
+  :group 'org-export-mdh
+  :type 'string)
+
+(defcustom org-mdh-link-title nil
+  "Title to show in a menu"
+  :group 'org-export-mdh
+  :type 'string)
 
 ;;; Filters
-
-;;; Transcode Functions
-
-;;;; Bold
 
 ;;;; Code and Verbatim
 
@@ -172,10 +183,26 @@ a communication channel."
 	       (if (not contents) (format "<%s>" path)
 		 (format "[%s](%s)" contents path)))))))
 
+
+;;; pre/postamble
+;; Derived from ox-reveal.el
+;; https://github.com/yjwen/org-reveal
+(defun org-mdh--build-pre/postamble (type info)
+  "Return document preamble or postamble as a string, or nil."
+  (let ((section (plist-get info (intern (format ":mdh-%s" type))))
+        (spec (org-html-format-spec info)))
+    (when section
+      (let ((section-contents
+             (if (functionp (intern section)) (funcall (intern section) info)
+               ;; else section is a string.
+               (format-spec section spec))))
+        (when (org-string-nw-p section-contents)
+           (org-element-normalize-string section-contents))))))
+
 ;;; Interactive function
 
 ;;;###autoload
-(defun org-mdh-export-as-markdown (&optional async subtreep visible-only)
+(defun org-md-export-as-markdown (&optional async subtreep visible-only)
   "Export current buffer to a Markdown buffer.
 
 If narrowing is active in the current buffer, only export its
@@ -215,7 +242,7 @@ non-nil."
 	(switch-to-buffer-other-window outbuf)))))
 
 ;;;###autoload
-(defun org-mdh-convert-region-to-md ()
+(defun org-md-convert-region-to-md ()
   "Assume the current region has org-mode syntax, and convert it to Markdown.
 This can be used in any buffer.  For example, you can write an
 itemized list in org-mode syntax in a Markdown buffer and use
@@ -225,7 +252,7 @@ this command to convert it."
 
 
 ;;;###autoload
-(defun org-mdh-export-to-markdown (&optional async subtreep visible-only)
+(defun org-md-export-to-markdown (&optional async subtreep visible-only)
   "Export current buffer to a Markdown file.
 
 If narrowing is active in the current buffer, only export its
@@ -254,5 +281,10 @@ Return output file's name."
 	    (org-export-to-file 'mdh ,outfile ,subtreep ,visible-only)))
       (org-export-to-file 'mdh outfile subtreep visible-only))))
 
+(defun org-md-template (contents info)
+  (concat
+   (org-mdh--build-pre/postamble 'preamble info)
+   contents
+   (org-mdh--build-pre/postamble 'postamble info)))
 
 (provide 'ox-mdh)
