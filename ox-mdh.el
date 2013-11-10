@@ -49,18 +49,18 @@
   :export-block '("MDH" "HIGGINBOTHAM EXTENDED MARKDOWN")
   :options-alist
   '((:mdh-include-preamble nil "mdh-include-preamble" org-mdh-include-preamble t)
-    (:mdh-link-title nil "mdh-link-title" org-mdh-link-title t)
-    (:mdh-preamble "MDH_PREAMBLE" nil org-mdh-preamble t))
+    (:mdh-link-title "MDH_LINK_TITLE" nil org-mdh-link-title t)
+    (:mdh-preamble "MDH_PREAMBLE" nil org-mdh-preamble t)
+    (:mdh-unseparated-element-types "MDH_UNSEPARATED_ELEMENT_TYPES" nil org-mdh-unseparate-element-types t))
   
-  :translate-alist '((code . org-mdh-verbatim)
-                     (example-block . org-mdh-src-block)
+  :translate-alist '((example-block . org-mdh-src-block)
                      ;;(fixed-width . org-mdh-src-block)
-                     (inline-src-block . org-md-verbatim)
                      (inline-src-block . org-mdh-inline-src-block)
                      (link . org-md-link)
                      (src-block . org-mdh-src-block)
-		     (underline . org-mdh-verbatim)
-		     (verbatim . org-mdh-verbatim)))
+                         (table . org-org-identity)
+                         (table-cell . org-org-identity)
+                         (table-row . org-org-identity)))
 
 (defcustom org-mdh-include-preamble t
   "Whether to actually include the preamble."
@@ -77,6 +77,11 @@
   :group 'org-export-mdh
   :type 'string)
 
+(defcustom org-mdh-unseparate-element-types '(org-data table table-row item)
+  "Org element types not to handle with org-md-separate-elements"
+  :group 'org-export-mdh
+  :type 'list)
+
 ;;; Filters
 
 ;;;; Code and Verbatim
@@ -84,104 +89,11 @@
 (defun org-mdh-inline-src-block (src contents info)
   (format "`%s`" (org-element-property :value code)))
 
-(defun org-mdh-verbatim (verbatim contents info)
-  "Do nothing to verbatim content."
-  (org-element-property :value verbatim))
-
 (defun org-mdh-src-block (src-block contents info)
   (let ((lang (org-element-property :language src-block)))
     (format "```%s\n%s```"
             (or lang "")
             (org-element-property :value src-block))))
-
-;;;; Example Block and Src Block
-
-(defun org-md-example-block (example-block contents info)
-  "Transcode EXAMPLE-BLOCK element into Markdown format.
-CONTENTS is nil.  INFO is a plist used as a communication
-channel."
-  (replace-regexp-in-string
-   "^" "    "
-   (org-remove-indentation
-    (org-element-property :value example-block))))
-
-
-;;;; Link
-
-(defun org-md-link (link contents info)
-  "Transcode LINE-BREAK object into Markdown format.
-CONTENTS is the link's description.  INFO is a plist used as
-a communication channel."
-  (let ((--link-org-files-as-html-maybe
-	 (function
-	  (lambda (raw-path info)
-	    ;; Treat links to `file.org' as links to `file.html', if
-            ;; needed.  See `org-html-link-org-files-as-html'.
-	    (cond
-	     ((and org-html-link-org-files-as-html
-		   (string= ".org"
-			    (downcase (file-name-extension raw-path "."))))
-	      (concat (file-name-sans-extension raw-path) "."
-		      (plist-get info :html-extension)))
-	     (t raw-path)))))
-	(type (org-element-property :type link)))
-    (cond ((member type '("custom-id" "id"))
-	   (let ((destination (org-export-resolve-id-link link info)))
-	     (if (stringp destination)	; External file.
-		 (let ((path (funcall --link-org-files-as-html-maybe
-				      destination info)))
-		   (if (not contents) (format "<%s>" path)
-		     (format "[%s](%s)" contents path)))
-	       (concat
-		(and contents (concat contents " "))
-		(format "(%s)"
-			(format (org-export-translate "See section %s" :html info)
-				(mapconcat 'number-to-string
-					   (org-export-get-headline-number
-					    destination info)
-					   ".")))))))
-	  ((org-export-inline-image-p link org-html-inline-image-rules)
-	   (let ((path (let ((raw-path (org-element-property :path link)))
-			 (if (not (file-name-absolute-p raw-path)) raw-path
-			   (expand-file-name raw-path)))))
-	     (format "![%s](%s)"
-		     (let ((caption (org-export-get-caption
-				     (org-export-get-parent-element link))))
-		       (when caption (org-export-data caption info)))
-		     path)))
-	  ((string= type "coderef")
-	   (let ((ref (org-element-property :path link)))
-	     (format (org-export-get-coderef-format ref contents)
-		     (org-export-resolve-coderef ref info))))
-	  ((equal type "radio")
-	   (let ((destination (org-export-resolve-radio-link link info)))
-	     (org-export-data (org-element-contents destination) info)))
-	  ((equal type "fuzzy")
-	   (let ((destination (org-export-resolve-fuzzy-link link info)))
-	     (if (org-string-nw-p contents) contents
-	       (when destination
-		 (let ((number (org-export-get-ordinal destination info)))
-		   (when number
-		     (if (atom number) (number-to-string number)
-		       (mapconcat 'number-to-string number "."))))))))
-	  (t (let* ((raw-path (org-element-property :path link))
-		    (path (cond
-			   ((member type '("http" "https" "ftp"))
-			    (concat type ":" raw-path))
-			   ((equal type "file")
-			    ;; Treat links to ".org" files as ".html",
-			    ;; if needed.
-			    (setq raw-path
-				  (funcall --link-org-files-as-html-maybe
-					   raw-path info))
-			    ;; If file path is absolute, prepend it
-			    ;; with protocol component - "file://".
-			    (if (not (file-name-absolute-p raw-path)) raw-path
-			      (concat "file://" (expand-file-name raw-path))))
-			   (t raw-path))))
-	       (if (not contents) (format "<%s>" path)
-		 (format "[%s](%s)" contents path)))))))
-
 
 ;;; pre/postamble
 ;; Derived from ox-reveal.el
@@ -285,5 +197,19 @@ Return output file's name."
    (org-mdh--build-pre/postamble 'preamble info)
    contents
    (org-mdh--build-pre/postamble 'postamble info)))
+
+(defun org-md-separate-elements (tree backend info)
+  "Redefined to allow multiple data types"
+  (org-element-map tree org-element-all-elements
+    (lambda (elem)
+      (unless (member (org-element-type elem) org-mdh-unseparate-element-types)
+        (progn
+          (message (symbol-name (org-element-type elem)))
+          (org-element-put-property
+           elem :post-blank
+           (let ((post-blank (org-element-property :post-blank elem)))
+             (if (not post-blank) 1 (max 1 post-blank))))))))
+  ;; Return updated tree.
+  tree)
 
 (provide 'ox-mdh)
