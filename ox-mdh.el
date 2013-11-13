@@ -30,6 +30,7 @@
 
 (eval-when-compile (require 'cl))
 (require 'ox-md)
+(require 'ox-org)
 
 
 
@@ -85,7 +86,6 @@
 ;;; Filters
 
 ;;;; Code and Verbatim
-
 (defun org-mdh-inline-src-block (src contents info)
   (format "`%s`" (org-element-property :value code)))
 
